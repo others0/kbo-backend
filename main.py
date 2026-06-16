@@ -1,15 +1,25 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+import logging
+from datetime import datetime
 import random
+import scraper
 
-app = FastAPI()
+# 실전용 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("kbo_backend")
 
-# 앱에서 서버로 접근할 수 있도록 CORS 허용
+app = FastAPI(title="KBO ScoreBoard API", version="1.0.0")
+
+# 보안 강화: CORS 허용 (실제 앱에서만 접근하도록 도메인 제한 가능)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"], # 실전에서는 ["https://your-domain.com"] 등으로 제한
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET"],
     allow_headers=["*"],
 )
 
@@ -36,8 +46,6 @@ batters_home = ["구자욱", "김지찬", "류지혁", "강민호", "이재현"]
 batters_away = ["홍창기", "박해민", "오지환", "오스틴", "문보경"]
 pitchers_home = ["원태인", "뷰캐넌", "오승환"]
 pitchers_away = ["켈리", "플럿코", "고우석"]
-
-import scraper
 
 # 선수들의 실제 타율 (2024년 시즌 기준 대략적인 값)
 batter_stats = {
@@ -90,17 +98,27 @@ def update_mock_data():
         live_data["winPitcher"] = game.get("winPitcher", "-")
         live_data["losePitcher"] = game.get("losePitcher", "-")
         live_data["savePitcher"] = game.get("savePitcher", "-")
+        live_data["holdPitchers"] = game.get("holdPitchers", [])
+        
+        # 실제 경기 팀 이름 업데이트
+        live_data["homeTeam"] = game.get("homeTeam", "삼성")
+        live_data["awayTeam"] = game.get("awayTeam", "LG")
                 
         # 타율 매핑
         if live_data["currentBatter"] in batter_stats:
             live_data["batterAverage"] = batter_stats[live_data["currentBatter"]]
         else:
             live_data["batterAverage"] = "0.280"
+    return live_data
 
 @app.get("/live")
 def get_live_data():
-    update_mock_data()
-    return live_data
+    try:
+        logger.info("Fetching /live data...")
+        return update_mock_data()
+    except Exception as e:
+        logger.error(f"Error in /live endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal Server Error while fetching KBO data.")
 
 @app.get("/")
 def read_root():
